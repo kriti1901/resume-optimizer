@@ -1,0 +1,17 @@
+Senior Backend Engineer - Payments
+
+We are looking for a backend engineer with 4+ years of experience.
+
+Requirements:
+- Strong Python and FastAPI
+- PostgreSQL and SQL performance tuning
+- Docker and Kubernetes
+- AWS
+- REST API design
+
+Nice to have:
+- Kafka
+- Machine Learning
+- Terraform
+
+You will work on microservices, payments systems and CI/CD pipelines.

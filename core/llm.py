@@ -1,63 +1,74 @@
-"""Thin wrapper around the Google Gen AI SDK for structured (pydantic) outputs from Gemini."""
+"""LangChain setup: the Gemini chat model and a helper that builds structured-output chains."""
 
 import os
 
 from dotenv import load_dotenv
-from google import genai
-from google.genai import errors, types
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv()
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
 
-_client: genai.Client | None = None
+_llm: ChatGoogleGenerativeAI | None = None
 
 
 class LLMError(RuntimeError):
     pass
 
 
-def client() -> genai.Client:
-    global _client
-    if _client is None:
+def get_llm() -> ChatGoogleGenerativeAI:
+    global _llm
+    if _llm is None:
         if not os.getenv("GEMINI_API_KEY"):
             raise LLMError("GEMINI_API_KEY is not set. Add it to your .env file.")
-        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    return _client
+        # Generous output limit because Gemini Pro's thinking tokens count toward it.
+        _llm = ChatGoogleGenerativeAI(
+            model=MODEL,
+            google_api_key=os.environ["GEMINI_API_KEY"],
+            max_output_tokens=32000,
+            max_retries=2,
+        )
+    return _llm
 
 
-def parse(system: str, user: str, schema, max_tokens: int = 16000):
-    """Call Gemini and return a validated instance of `schema`.
+def structured_chain(system: str, human: str, schema) -> Runnable:
+    """prompt | Gemini with structured output. The chain returns {"raw", "parsed", "parsing_error"}."""
+    prompt = ChatPromptTemplate.from_messages([("system", system), ("human", human)])
+    return prompt | get_llm().with_structured_output(schema, include_raw=True)
 
-    max_tokens is generous because Gemini Pro's thinking tokens count toward the output limit.
-    """
-    config = types.GenerateContentConfig(
-        system_instruction=system,
-        response_mime_type="application/json",
-        response_schema=schema,
-        max_output_tokens=max_tokens,
-    )
+
+def _status_code(exc: BaseException) -> int | None:
+    while exc is not None:
+        code = getattr(exc, "code", None)
+        if isinstance(code, int):
+            return code
+        exc = exc.__cause__
+    return None
+
+
+def run(chain: Runnable, inputs: dict, schema):
+    """Invoke a structured chain and return a validated `schema` instance, or raise LLMError."""
     try:
-        response = client().models.generate_content(model=MODEL, contents=user, config=config)
-    except errors.ClientError as e:
-        if e.code in (401, 403) or "API key" in str(e):
+        result = chain.invoke(inputs)
+    except LLMError:
+        raise
+    except Exception as e:  # langchain-google-genai wraps SDK errors in its own exception types
+        code = _status_code(e)
+        if code in (401, 403) or "API key" in str(e):
             raise LLMError("Invalid GEMINI_API_KEY.") from e
-        if e.code == 429:
+        if code == 429:
             raise LLMError("Gemini rate limit or free-tier quota reached. Wait a minute or check your quota.") from e
-        if e.code == 404:
+        if code == 404:
             raise LLMError(f"Model '{MODEL}' not found. Set GEMINI_MODEL in .env to a current model.") from e
-        raise LLMError(f"Gemini API error ({e.code}): {e.message}") from e
-    except errors.ServerError as e:
-        raise LLMError(f"Gemini server error ({e.code}). Try again shortly.") from e
+        raise LLMError(f"Gemini API error: {e}") from e
 
-    feedback = response.prompt_feedback
-    if feedback and feedback.block_reason:
-        raise LLMError(f"Gemini blocked this request ({feedback.block_reason}).")
-    finish = response.candidates[0].finish_reason if response.candidates else None
-    if finish == types.FinishReason.MAX_TOKENS:
+    finish = str(result["raw"].response_metadata.get("finish_reason", "STOP")).upper()
+    if "MAX_TOKENS" in finish:
         raise LLMError("The response was cut off (max tokens). Try a shorter resume or JD.")
-    if finish not in (None, types.FinishReason.STOP):
+    if "STOP" not in finish:
         raise LLMError(f"Gemini stopped early ({finish}).")
-    if not isinstance(response.parsed, schema):
+    if result.get("parsing_error") or not isinstance(result.get("parsed"), schema):
         raise LLMError("Gemini returned output that didn't match the expected format.")
-    return response.parsed
+    return result["parsed"]

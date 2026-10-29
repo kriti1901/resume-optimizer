@@ -1,6 +1,6 @@
-"""LLM extraction: raw resume / JD text -> structured profiles."""
+"""LangChain extraction chains: raw resume / JD text -> structured profiles."""
 
-from core.llm import parse
+from core.llm import run, structured_chain
 from core.parser import strip_pii
 from core.schemas import JDProfile, ResumeProfile
 
@@ -18,8 +18,10 @@ JD_SYSTEM = (
 
 
 def extract_resume(resume_text: str) -> ResumeProfile:
-    return parse(RESUME_SYSTEM, f"<resume>\n{strip_pii(resume_text)}\n</resume>", ResumeProfile)
+    chain = structured_chain(RESUME_SYSTEM, "<resume>\n{resume}\n</resume>", ResumeProfile)
+    return run(chain, {"resume": strip_pii(resume_text)}, ResumeProfile)
 
 
 def extract_jd(jd_text: str) -> JDProfile:
-    return parse(JD_SYSTEM, f"<job_description>\n{jd_text}\n</job_description>", JDProfile)
+    chain = structured_chain(JD_SYSTEM, "<job_description>\n{jd}\n</job_description>", JDProfile)
+    return run(chain, {"jd": jd_text}, JDProfile)

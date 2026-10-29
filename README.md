@@ -7,7 +7,7 @@ Upload a resume and paste a job description to get:
 - **ATS check**: keyword coverage plus format rules
 - **Rewrite suggestions**: bullets tailored to the JD, using only facts already in your resume
 
-Built with Python, Streamlit and the Google Gemini API.
+Built with Python, Streamlit, LangChain and Google Gemini.
 
 ## How the score works
 
@@ -31,6 +31,18 @@ streamlit run app.py
 
 Get a free API key at https://aistudio.google.com/apikey.
 
+## How LangChain is used
+
+Each AI step is a LangChain (LCEL) chain: a `ChatPromptTemplate` piped into `ChatGoogleGenerativeAI` with `.with_structured_output()`, so Gemini returns a validated pydantic object.
+
+| Chain | Input | Output |
+|---|---|---|
+| Resume extraction | resume text (personal info stripped) | `ResumeProfile` |
+| JD extraction | job description | `JDProfile` |
+| Rewrites | JD summary, skill gaps, resume bullets | `RewriteResult` |
+
+The chains are built in `core/llm.py` (`structured_chain`) and used in `core/extractor.py` and `core/rewriter.py`.
+
 ## Model and cost
 
 Uses `gemini-3.1-pro-preview` for both extraction and rewrites. Override it with the `GEMINI_MODEL` environment variable (for example `GEMINI_MODEL=gemini-2.5-flash` for higher free-tier limits). Results are cached per resume + JD, so re-running costs nothing.
@@ -44,13 +56,13 @@ Email addresses, phone numbers and profile URLs are stripped before any text is 
 ```
 app.py              Streamlit UI
 core/parser.py      PDF/DOCX/TXT -> text, PII stripping
-core/llm.py         Gemini structured-output wrapper
-core/extractor.py   Resume/JD -> pydantic profiles
+core/llm.py         LangChain Gemini model + structured-output chain helper
+core/extractor.py   LangChain extraction chains (resume, JD)
 core/matcher.py     Synonyms, fuzzy matching, similarity
 core/gaps.py        Missing / transferable / weak skills
 core/ats.py         Keyword and format checks
 core/scorer.py      Weighted score
-core/rewriter.py    Bullet rewrites
+core/rewriter.py    LangChain rewrite chain
 core/pipeline.py    Ties it together
 data/skills_synonyms.json   Skill aliases and related-skill families
 tests/              pytest suite (no API key needed)

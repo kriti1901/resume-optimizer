@@ -7,11 +7,11 @@ Upload a resume and paste a job description to get:
 - **ATS check**: keyword coverage plus format rules
 - **Rewrite suggestions**: bullets tailored to the JD, using only facts already in your resume
 
-Built with Python, Streamlit and the Claude API.
+Built with Python, Streamlit and the Google Gemini API.
 
 ## How the score works
 
-Claude only *extracts* structured data (skills, bullets, years of experience). The score itself is computed by deterministic code, so it is explainable and repeatable.
+Gemini only *extracts* structured data (skills, bullets, years of experience). The score itself is computed by deterministic code, so it is explainable and repeatable.
 
 | Component | Weight | How |
 |---|---|---|
@@ -25,18 +25,15 @@ Claude only *extracts* structured data (skills, bullets, years of experience). T
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # then put your Anthropic API key in .env
+cp .env.example .env   # then put your Gemini API key in .env
 streamlit run app.py
 ```
 
-Get an API key at https://console.anthropic.com.
+Get a free API key at https://aistudio.google.com/apikey.
 
-## Models and cost
+## Model and cost
 
-- Extraction: `claude-haiku-5-5` (cheap and fast)
-- Rewrites: `claude-sonnet-5-5`, with server-side refusal fallbacks enabled
-
-Override them with the `EXTRACT_MODEL` / `REWRITE_MODEL` environment variables. A full analysis with rewrites costs about a cent or two. Results are cached per resume + JD, so re-running costs nothing.
+Uses `gemini-3.1-pro-preview` for both extraction and rewrites. Override it with the `GEMINI_MODEL` environment variable (for example `GEMINI_MODEL=gemini-2.5-flash` for higher free-tier limits). Results are cached per resume + JD, so re-running costs nothing.
 
 ## Privacy
 
@@ -47,7 +44,7 @@ Email addresses, phone numbers and profile URLs are stripped before any text is 
 ```
 app.py              Streamlit UI
 core/parser.py      PDF/DOCX/TXT -> text, PII stripping
-core/llm.py         Claude structured-output wrapper
+core/llm.py         Gemini structured-output wrapper
 core/extractor.py   Resume/JD -> pydantic profiles
 core/matcher.py     Synonyms, fuzzy matching, similarity
 core/gaps.py        Missing / transferable / weak skills
@@ -67,7 +64,7 @@ pytest
 
 ## Deploy (free)
 
-Push to GitHub, then create an app on [Streamlit Community Cloud](https://share.streamlit.io) pointing at `app.py`, and add `ANTHROPIC_API_KEY` under **Secrets**.
+Push to GitHub, then create an app on [Streamlit Community Cloud](https://share.streamlit.io) pointing at `app.py`, and add `GEMINI_API_KEY` under **Secrets**.
 
 ## Ideas for next steps
 

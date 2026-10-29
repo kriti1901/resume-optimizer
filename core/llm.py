@@ -1,62 +1,63 @@
-"""Thin wrapper around the Anthropic SDK for structured (pydantic) outputs."""
+"""Thin wrapper around the Google Gen AI SDK for structured (pydantic) outputs from Gemini."""
 
 import os
 
-import anthropic
 from dotenv import load_dotenv
+from google import genai
+from google.genai import errors, types
 
 load_dotenv()
 
-EXTRACT_MODEL = os.getenv("EXTRACT_MODEL", "claude-haiku-5-5")
-REWRITE_MODEL = os.getenv("REWRITE_MODEL", "claude-sonnet-5-5")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
 
-_client: anthropic.Anthropic | None = None
+_client: genai.Client | None = None
 
 
 class LLMError(RuntimeError):
     pass
 
 
-def client() -> anthropic.Anthropic:
+def client() -> genai.Client:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic()
+        if not os.getenv("GEMINI_API_KEY"):
+            raise LLMError("GEMINI_API_KEY is not set. Add it to your .env file.")
+        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     return _client
 
 
-def parse(model: str, system: str, user: str, schema, max_tokens: int = 8000, effort: str = "low"):
-    """Call Claude and return a validated instance of `schema`.
+def parse(system: str, user: str, schema, max_tokens: int = 16000):
+    """Call Gemini and return a validated instance of `schema`.
 
-    Sonnet 5.5 gets server-side refusal fallbacks; Haiku 5.5 has none, so it uses the plain endpoint.
+    max_tokens is generous because Gemini Pro's thinking tokens count toward the output limit.
     """
-    kwargs = dict(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-        output_format=schema,
-        output_config={"effort": effort},
+    config = types.GenerateContentConfig(
+        system_instruction=system,
+        response_mime_type="application/json",
+        response_schema=schema,
+        max_output_tokens=max_tokens,
     )
     try:
-        if model.startswith("claude-sonnet-5-5"):
-            response = client().beta.messages.parse(
-                betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs
-            )
-        else:
-            response = client().messages.parse(**kwargs)
-    except anthropic.AuthenticationError as e:
-        raise LLMError("Invalid or missing ANTHROPIC_API_KEY.") from e
-    except anthropic.RateLimitError as e:
-        raise LLMError("Rate limited by the Anthropic API. Try again in a minute.") from e
-    except anthropic.APIStatusError as e:
-        raise LLMError(f"Anthropic API error ({e.status_code}): {e.message}") from e
-    except anthropic.APIConnectionError as e:
-        raise LLMError("Could not reach the Anthropic API.") from e
+        response = client().models.generate_content(model=MODEL, contents=user, config=config)
+    except errors.ClientError as e:
+        if e.code in (401, 403) or "API key" in str(e):
+            raise LLMError("Invalid GEMINI_API_KEY.") from e
+        if e.code == 429:
+            raise LLMError("Gemini rate limit or free-tier quota reached. Wait a minute or check your quota.") from e
+        if e.code == 404:
+            raise LLMError(f"Model '{MODEL}' not found. Set GEMINI_MODEL in .env to a current model.") from e
+        raise LLMError(f"Gemini API error ({e.code}): {e.message}") from e
+    except errors.ServerError as e:
+        raise LLMError(f"Gemini server error ({e.code}). Try again shortly.") from e
 
-    if response.stop_reason == "refusal":
-        raise LLMError("The model declined this request.")
-    if response.stop_reason == "max_tokens":
-        raise LLMError("The response was cut off (max_tokens). Try a shorter resume or JD.")
-    if response.parsed_output is None:
-        raise LLMError("The model returned output that didn't match the expected format.")
-    return response.parsed_output
+    feedback = response.prompt_feedback
+    if feedback and feedback.block_reason:
+        raise LLMError(f"Gemini blocked this request ({feedback.block_reason}).")
+    finish = response.candidates[0].finish_reason if response.candidates else None
+    if finish == types.FinishReason.MAX_TOKENS:
+        raise LLMError("The response was cut off (max tokens). Try a shorter resume or JD.")
+    if finish not in (None, types.FinishReason.STOP):
+        raise LLMError(f"Gemini stopped early ({finish}).")
+    if not isinstance(response.parsed, schema):
+        raise LLMError("Gemini returned output that didn't match the expected format.")
+    return response.parsed

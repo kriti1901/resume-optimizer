@@ -1,6 +1,6 @@
 """LLM bullet rewrites, grounded in the resume's own facts."""
 
-from core.llm import REWRITE_MODEL, parse
+from core.llm import parse
 from core.parser import strip_pii
 from core.schemas import Gap, JDProfile, ResumeProfile, RewriteResult
 
@@ -35,4 +35,4 @@ Keywords: {', '.join(jd.keywords)}
 </full_resume>
 
 Rewrite the bullets per the rules. In `original`, copy the bullet exactly as it appears above."""
-    return parse(REWRITE_MODEL, SYSTEM, user, RewriteResult, max_tokens=16000, effort="medium")
+    return parse(SYSTEM, user, RewriteResult, max_tokens=32000)

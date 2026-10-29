@@ -1,6 +1,6 @@
 """LLM extraction: raw resume / JD text -> structured profiles."""
 
-from core.llm import EXTRACT_MODEL, parse
+from core.llm import parse
 from core.parser import strip_pii
 from core.schemas import JDProfile, ResumeProfile
 
@@ -18,8 +18,8 @@ JD_SYSTEM = (
 
 
 def extract_resume(resume_text: str) -> ResumeProfile:
-    return parse(EXTRACT_MODEL, RESUME_SYSTEM, f"<resume>\n{strip_pii(resume_text)}\n</resume>", ResumeProfile)
+    return parse(RESUME_SYSTEM, f"<resume>\n{strip_pii(resume_text)}\n</resume>", ResumeProfile)
 
 
 def extract_jd(jd_text: str) -> JDProfile:
-    return parse(EXTRACT_MODEL, JD_SYSTEM, f"<job_description>\n{jd_text}\n</job_description>", JDProfile)
+    return parse(JD_SYSTEM, f"<job_description>\n{jd_text}\n</job_description>", JDProfile)

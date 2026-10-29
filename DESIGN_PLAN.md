@@ -1,5 +1,7 @@
 # AI Resume Optimizer: Design Plan
 
+> **Update:** the app now uses Google Gemini (`gemini-3.1-pro-preview`) instead of Claude. See the README for setup.
+
 ## Context
 A portfolio project in Python that uses a hosted LLM API. The user uploads a resume (PDF or DOCX) and pastes a job description (JD). The app returns:
 1. A **match score** (0–100) with a breakdown

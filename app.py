@@ -4,12 +4,15 @@ import os
 
 import plotly.graph_objects as go
 import streamlit as st
+from dotenv import load_dotenv
 
 from core import extractor, rewriter
 from core.llm import LLMError
 from core.parser import parse_resume
 from core.pipeline import analyze_profiles
 from core.scorer import WEIGHTS
+
+load_dotenv()
 
 st.set_page_config(page_title="AI Resume Optimizer", page_icon="📄", layout="wide")
 
@@ -41,8 +44,8 @@ LABELS = {
 st.title("📄 AI Resume Optimizer")
 st.caption("Upload your resume and paste a job description to get a match score, skill gaps, an ATS check and rewrite suggestions.")
 
-if not os.getenv("ANTHROPIC_API_KEY"):
-    st.warning("Set ANTHROPIC_API_KEY in a `.env` file or your environment before running an analysis.")
+if not os.getenv("GEMINI_API_KEY"):
+    st.warning("Set GEMINI_API_KEY in a `.env` file or your environment before running an analysis.")
 
 col1, col2 = st.columns(2)
 with col1:
